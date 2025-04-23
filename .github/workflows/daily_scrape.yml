@@ -1,0 +1,33 @@
+name: Daily Cybersecurity Scraper
+on:
+  schedule:
+    - cron: '0 8 * * *'  # 8 AM UTC daily
+  workflow_dispatch:       # Allow manual runs
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Python
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      # Step 3: Install EXACT dependencies
+      - name: Install packages
+        run: |
+          pip install --upgrade pip
+          pip install feedparser==6.0.10 supabase google-generativeai==0.3.2
+
+      # Step 4: Run script
+      - name: Execute scraper
+        run: python scrape_news.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
