@@ -14,15 +14,22 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Detect OS and set Ollama path
-if platform.system() == "Windows":
-    OLLAMA_CMD = "C:\\Program Files\\Ollama\\ollama.exe"
-else:
-    OLLAMA_CMD = "ollama"  # For Linux/GitHub Actions
+# Custom Ollama path configuration
+OLLAMA_PATHS = {
+    "Windows": r"C:\\Users\\MAEGHAN\\AppData\\Local\\Programs\\Ollama\\ollama.exe",
+    "Linux": "ollama"
+}
 
-# Verify Ollama exists
-if not (os.path.exists(OLLAMA_CMD) if platform.system() == "Windows" else any(os.access(os.path.join(path, OLLAMA_CMD), os.X_OK) for path in os.environ["PATH"].split(os.pathsep))):
-    sys.exit(f"Ollama not found at {OLLAMA_CMD}. Please install Ollama first.")
+def get_ollama_path():
+    system = platform.system()
+    path = OLLAMA_PATHS.get(system)
+    
+    if not path or not os.path.exists(path):
+        print(f"Ollama not found at configured path: {path}")
+        print("Please verify Ollama installation or update the OLLAMA_PATHS dictionary")
+        sys.exit(1)
+        
+    return path
 
 # Scrape and process news
 try:
@@ -57,11 +64,14 @@ try:
     Recent cybersecurity developments:
     {combined_titles}
     
-    Craft a 3-paragraph post with emojis and hashtags:"""
+    Craft a 3-paragraph post and there should be no emojis:"""
+
+    # Get validated Ollama path
+    ollama_path = get_ollama_path()
 
     # Generate summary with Ollama
     result = subprocess.run(
-        [OLLAMA_CMD, "run", "mistral"],
+        [ollama_path, "run", "mistral"],
         input=prompt.encode("utf-8"),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -82,8 +92,7 @@ try:
     # Save summary to Supabase
     supabase.table("summaries").insert({
         "content": summary,
-        "is_approved": False,
-        "posted": False
+        "is_approved": False
     }).execute()
     
     print("Successfully saved summary to Supabase")
@@ -95,5 +104,3 @@ except subprocess.TimeoutExpired:
 except Exception as e:
     print(f"AI processing error: {str(e)}")
     sys.exit(1)
-
-
