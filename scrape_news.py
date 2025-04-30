@@ -16,17 +16,21 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Custom Ollama path configuration
 OLLAMA_PATHS = {
-    "Windows": r"C:\\Users\\MAEGHAN\\AppData\\Local\\Programs\\Ollama\\ollama.exe",
-    "Linux": "ollama"
+    "Windows": r"C:\Users\MAEGHAN\AppData\Local\Programs\Ollama\ollama.exe",
+    "Linux": "/usr/bin/ollama"  # Now using absolute Linux path
 }
 
 def get_ollama_path():
     system = platform.system()
     path = OLLAMA_PATHS.get(system)
     
+    # Special check for Linux
+    if system == "Linux" and not os.path.exists(path):
+        print("Attempting to find Ollama in PATH...")
+        path = "ollama"  # Fallback to PATH lookup
+        
     if not path or not os.path.exists(path):
-        print(f"Ollama not found at configured path: {path}")
-        print("Please verify Ollama installation or update the OLLAMA_PATHS dictionary")
+        print(f"Ollama not found at: {path}")
         sys.exit(1)
         
     return path
