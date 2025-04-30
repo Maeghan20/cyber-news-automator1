@@ -1,12 +1,12 @@
 import feedparser
 from supabase import create_client
 import os
-from dotenv import load_dotenv
 import subprocess
 import platform
 import sys
+from shutil import which
+from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
 # Supabase configuration
@@ -14,98 +14,55 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Custom Ollama path configuration
-OLLAMA_PATHS = {
-    "Windows": r"C:\Users\MAEGHAN\AppData\Local\Programs\Ollama\ollama.exe",
-    "Linux": "/usr/bin/ollama"  # Now using absolute Linux path
-}
-
 def get_ollama_path():
-    system = platform.system()
-    path = OLLAMA_PATHS.get(system)
+    """Dynamically locate Ollama executable"""
+    if platform.system() == "Windows":
+        win_path = r"C:\Users\MAEGHAN\AppData\Local\Programs\Ollama\ollama.exe"
+        if os.path.exists(win_path):
+            return win_path
+        raise FileNotFoundError(f"Ollama not found at {win_path}")
     
-    # Special check for Linux
-    if system == "Linux" and not os.path.exists(path):
-        print("Attempting to find Ollama in PATH...")
-        path = "ollama"  # Fallback to PATH lookup
-        
-    if not path or not os.path.exists(path):
-        print(f"Ollama not found at: {path}")
-        sys.exit(1)
-        
-    return path
+    # For Linux/GitHub Actions
+    linux_path = which("ollama")
+    if linux_path and os.access(linux_path, os.X_OK):
+        return linux_path
+    
+    raise FileNotFoundError("Ollama not found in PATH. Install with: curl -fsSL https://ollama.com/install.sh | sh")
 
-# Scrape and process news
 try:
-    # Scrape Google News RSS feed
+    # Scrape articles
     news_feed = feedparser.parse("https://news.google.com/rss/search?q=cybersecurity+when:1d&hl=en-US&gl=US&ceid=US:en")
-    
-    # Extract top 5 articles
     articles = [{"title": entry.title, "link": entry.link} for entry in news_feed.entries[:5]]
-    
-    if not articles:
-        print("No articles found in RSS feed")
-        sys.exit(0)
-        
-    # Save to Supabase
     supabase.table("news").insert(articles).execute()
-    print(f"Inserted {len(articles)} articles into Supabase")
+    print(f"Inserted {len(articles)} articles")
 
-except Exception as e:
-    print(f"Scraping error: {str(e)}")
-    sys.exit(1)
-
-try:
-    # Generate LinkedIn post prompt
+    # Generate prompt
     combined_titles = "\n".join([f"- {a['title']}" for a in articles])
-    prompt = f"""You are a cybersecurity expert creating a LinkedIn post. Use this tone:
-    - Engaging, contemporary, and educational
-    - Avoid corporate jargon and generic statements
-    - Offer sharp insights and personal perspective
-    - Use modern analogies
-    - End with an engaging question
-    
-    Recent cybersecurity developments:
-    {combined_titles}
-    
-    Craft a 3-paragraph post and there should be no emojis:"""
+    prompt = f"""Create a LinkedIn post with:
+    - Engaging cybersecurity insights
+    - Modern analogies
+    - Ending question
+    News: {combined_titles}"""
 
     # Get validated Ollama path
     ollama_path = get_ollama_path()
-
-    # Generate summary with Ollama
+    
+    # Run Ollama
     result = subprocess.run(
         [ollama_path, "run", "mistral"],
         input=prompt.encode("utf-8"),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        timeout=300  # 5 minute timeout
+        timeout=300
     )
-
-    # Handle Ollama output
+    
     if result.returncode != 0:
-        print(f"Ollama error: {result.stderr.decode('utf-8')}")
-        sys.exit(1)
-        
-    summary = result.stdout.decode("utf-8").strip()
-    
-    if not summary:
-        print("Received empty summary from Ollama")
-        sys.exit(1)
+        raise RuntimeError(f"Ollama error: {result.stderr.decode()}")
 
-    # Save summary to Supabase
-    supabase.table("summaries").insert({
-        "content": summary,
-        "is_approved": False,
-        "posted": False,
-    }).execute()
-    
-    print("Successfully saved summary to Supabase")
-    print("Preview:", summary[:200] + "...")
+    summary = result.stdout.decode().strip()
+    supabase.table("summaries").insert({"content": summary, "is_approved": False}).execute()
+    print("Summary saved successfully")
 
-except subprocess.TimeoutExpired:
-    print("Ollama response timed out after 5 minutes")
-    sys.exit(1)
 except Exception as e:
-    print(f"AI processing error: {str(e)}")
+    print(f"Error: {str(e)}")
     sys.exit(1)
