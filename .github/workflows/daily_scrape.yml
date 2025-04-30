@@ -39,8 +39,12 @@ jobs:
       - name: Execute scraper
         run: |
           # Start Ollama in the background
-          nohup ollama serve > /dev/null 2>&1 &
-          sleep 10  # Wait for Ollama to start
+          ollama serve > /dev/null 2>&1 &
+          # Wait for Ollama to initialize
+          sleep 20
+          # Pull the model (if not already cached)
+          ollama pull mistral
+          # Run the script
           python scrape_news.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
