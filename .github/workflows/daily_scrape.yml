@@ -1,33 +1,47 @@
 name: Daily Cybersecurity Scraper
 on:
   schedule:
-    - cron: '0 8 * * *'  # 8 AM UTC daily
-  workflow_dispatch:       # Allow manual runs
+    - cron: '0 8 * * *'  # 8am UTC
+  workflow_dispatch:
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Set up Python
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl
+
+      # Install Ollama
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama --version
+
+      # Pull the model (e.g., mistral)
+      - name: Download Ollama model
+        run: ollama pull mistral
+
       - name: Set up Python 3.9
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
 
-      # Step 3: Install EXACT dependencies
-      - name: Install packages
+      - name: Install Python packages
         run: |
           pip install --upgrade pip
-          pip install feedparser==6.0.10 supabase google-generativeai==0.3.2
+          pip install feedparser==6.0.10 supabase python-dotenv
 
-      # Step 4: Run script
       - name: Execute scraper
-        run: python scrape_news.py
+        run: |
+          # Start Ollama in the background
+          nohup ollama serve > /dev/null 2>&1 &
+          sleep 10  # Wait for Ollama to start
+          python scrape_news.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
