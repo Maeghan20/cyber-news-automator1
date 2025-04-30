@@ -3,61 +3,97 @@ from supabase import create_client
 import os
 from dotenv import load_dotenv
 import subprocess
+import platform
+import sys
 
-
+# Load environment variables
 load_dotenv()
 
-
+# Supabase configuration
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# Detect OS and set Ollama path
+if platform.system() == "Windows":
+    OLLAMA_CMD = "C:\\Program Files\\Ollama\\ollama.exe"
+else:
+    OLLAMA_CMD = "ollama"  # For Linux/GitHub Actions
 
-tone = "a cool cybersecurity guy explaining the recent developments in a relatable and engaging way but not corny"
+# Verify Ollama exists
+if not (os.path.exists(OLLAMA_CMD) if platform.system() == "Windows" else any(os.access(os.path.join(path, OLLAMA_CMD), os.X_OK) for path in os.environ["PATH"].split(os.pathsep))):
+    sys.exit(f"Ollama not found at {OLLAMA_CMD}. Please install Ollama first.")
 
-
+# Scrape and process news
 try:
+    # Scrape Google News RSS feed
     news_feed = feedparser.parse("https://news.google.com/rss/search?q=cybersecurity+when:1d&hl=en-US&gl=US&ceid=US:en")
+    
+    # Extract top 5 articles
     articles = [{"title": entry.title, "link": entry.link} for entry in news_feed.entries[:5]]
+    
+    if not articles:
+        print("No articles found in RSS feed")
+        sys.exit(0)
+        
+    # Save to Supabase
     supabase.table("news").insert(articles).execute()
+    print(f"Inserted {len(articles)} articles into Supabase")
+
 except Exception as e:
     print(f"Scraping error: {str(e)}")
-
+    sys.exit(1)
 
 try:
-    
+    # Generate LinkedIn post prompt
     combined_titles = "\n".join([f"- {a['title']}" for a in articles])
-    prompt = f"""
-    You are a cybersecurity expert, and your goal is to create an engaging LinkedIn post summarizing the latest cybersecurity developments like new thnigs. Write the post in the following tone:
-
+    prompt = f"""You are a cybersecurity expert creating a LinkedIn post. Use this tone:
     - Engaging, contemporary, and educational
-    - Avoids overly preachy or generic language
-    - Focus on sharp observations, and provide a personal perspective
-    - Use clear, modern metaphors and avoid old-sounding phrases
-    - Incorporate an insightful question at the end to encourage audience interaction
-
-
-    Here are the latest headlines:
-    {combined_titles}
-    """
-
+    - Avoid corporate jargon and generic statements
+    - Offer sharp insights and personal perspective
+    - Use modern analogies
+    - End with an engaging question
     
+    Recent cybersecurity developments:
+    {combined_titles}
+    
+    Craft a 3-paragraph post with emojis and hashtags:"""
+
+    # Generate summary with Ollama
     result = subprocess.run(
-    ["C:\\Users\\MAEGHAN\\AppData\\Local\\Programs\\Ollama\\ollama", "run", "mistral"],
-    input=prompt.encode("utf-8"),
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE
+        [OLLAMA_CMD, "run", "mistral"],
+        input=prompt.encode("utf-8"),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=300  # 5 minute timeout
     )
 
-
-    
+    # Handle Ollama output
+    if result.returncode != 0:
+        print(f"Ollama error: {result.stderr.decode('utf-8')}")
+        sys.exit(1)
+        
     summary = result.stdout.decode("utf-8").strip()
-
     
-    supabase.table("summaries").insert({"content": summary, "is_approved": False}).execute()
-    print("Success! Summary saved.")
+    if not summary:
+        print("Received empty summary from Ollama")
+        sys.exit(1)
 
+    # Save summary to Supabase
+    supabase.table("summaries").insert({
+        "content": summary,
+        "is_approved": False,
+        "source_count": len(articles)
+    }).execute()
+    
+    print("Successfully saved summary to Supabase")
+    print("Preview:", summary[:200] + "...")
+
+except subprocess.TimeoutExpired:
+    print("Ollama response timed out after 5 minutes")
+    sys.exit(1)
 except Exception as e:
-    print(f"AI error: {str(e)}")
+    print(f"AI processing error: {str(e)}")
+    sys.exit(1)
+
+

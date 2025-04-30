@@ -11,6 +11,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Install system dependencies
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -22,10 +23,17 @@ jobs:
           curl -fsSL https://ollama.com/install.sh | sh
           ollama --version
 
-      # Pull the model (e.g., mistral)
-      - name: Download Ollama model
-        run: ollama pull mistral
+      # Start Ollama service and pull model
+      - name: Initialize Ollama
+        run: |
+          # Start Ollama in the background
+          nohup ollama serve > /dev/null 2>&1 &
+          # Wait for service to start
+          sleep 30
+          # Pull the model
+          ollama pull mistral
 
+      # Python setup
       - name: Set up Python 3.9
         uses: actions/setup-python@v5
         with:
@@ -34,18 +42,11 @@ jobs:
       - name: Install Python packages
         run: |
           pip install --upgrade pip
-          pip install feedparser==6.0.10 supabase python-dotenv
+          pip install feedparser supabase python-dotenv
 
+      # Run the scraper
       - name: Execute scraper
-        run: |
-          # Start Ollama in the background
-          ollama serve > /dev/null 2>&1 &
-          # Wait for Ollama to initialize
-          sleep 20
-          # Pull the model (if not already cached)
-          ollama pull mistral
-          # Run the script
-          python scrape_news.py
+        run: python scrape_news.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
