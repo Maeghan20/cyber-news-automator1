@@ -82,8 +82,7 @@ try:
     # Save summary to Supabase
     supabase.table("summaries").insert({
         "content": summary,
-        "is_approved": False,
-        "source_count": len(articles)
+        "is_approved": False
     }).execute()
     
     print("Successfully saved summary to Supabase")
