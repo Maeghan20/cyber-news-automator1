@@ -36,10 +36,11 @@ jobs:
       - name: Install Python packages
         run: |
           pip install --upgrade pip
-          pip install feedparser==6.0.10 supabase python-dotenv
+          pip install feedparser==6.0.10 supabase python-dotenv requests
 
       - name: Run scraper
         run: python scrape_news.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
