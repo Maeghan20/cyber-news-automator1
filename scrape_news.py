@@ -112,8 +112,9 @@ try:
     # Save summary and image to Supabase
     supabase.table("summaries").insert({
         "content": summary,
+        "is_approved": False,
+        "posted": False,
         "image_url": image_url,
-        "is_approved": False
     }).execute()
     print("Summary and image saved successfully")
 
