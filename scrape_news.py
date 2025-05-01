@@ -47,7 +47,7 @@ def fetch_unsplash_image(query="cybersecurity"):
     url = f"https://api.unsplash.com/photos/random?client_id={UNSPLASH_ACCESS_KEY}&query={query}&orientation=landscape"
     response = requests.get(url)
     if response.status_code == 200:
-        image_data = response.json()[0]
+        image_data = response.json()
         return image_data['urls']['regular']
     return None
 
